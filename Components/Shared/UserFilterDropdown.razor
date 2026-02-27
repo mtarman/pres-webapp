@@ -1,0 +1,55 @@
+<div class="uf-wrapper">
+    <button class="btn btn-sm @(_isFiltered ? "btn-primary" : "btn-outline-secondary")"
+            type="button" @onclick="ToggleOpen">
+        @_label <span class="ms-1 small">▾</span>
+    </button>
+
+    @if (_open)
+    {
+        <div class="uf-backdrop" @onclick="Close"></div>
+        <div class="uf-menu shadow-sm">
+            <div class="uf-actions border-bottom px-2 py-1 d-flex gap-2">
+                <button class="btn btn-link btn-sm p-0" @onclick="SelectAll" @onclick:stopPropagation="true">All</button>
+                <button class="btn btn-link btn-sm p-0" @onclick="ClearAll" @onclick:stopPropagation="true">None</button>
+            </div>
+            @foreach (var user in Users)
+            {
+                var uid = user.Id;
+                <label class="uf-item"
+                       @onclick="() => OnToggle(uid)"
+                       @onclick:preventDefault="true"
+                       @onclick:stopPropagation="true">
+                    <input type="checkbox" checked="@Selected.Contains(uid)" />
+                    @user.Label
+                </label>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public IReadOnlyList<(string Id, string Label)> Users { get; set; } = Array.Empty<(string, string)>();
+    [Parameter] public HashSet<string> Selected { get; set; } = new();
+    [Parameter] public EventCallback<HashSet<string>> SelectedChanged { get; set; }
+
+    private bool _open;
+    private bool _isFiltered => Selected.Count > 0 && Selected.Count < Users.Count;
+    private string _label => _isFiltered ? $"{Selected.Count}/{Users.Count} users" : "All users";
+
+    private void ToggleOpen() { _open = !_open; StateHasChanged(); }
+    private void Close() { _open = false; StateHasChanged(); }
+
+    private Task OnToggle(string uid)
+    {
+        var next = new HashSet<string>(Selected);
+        if (next.Contains(uid)) next.Remove(uid);
+        else next.Add(uid);
+        return SelectedChanged.InvokeAsync(next);
+    }
+
+    private Task SelectAll()
+        => SelectedChanged.InvokeAsync(new HashSet<string>(Users.Select(u => u.Id)));
+
+    private Task ClearAll()
+        => SelectedChanged.InvokeAsync(new HashSet<string>());
+}

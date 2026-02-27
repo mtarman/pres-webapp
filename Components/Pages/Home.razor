@@ -1,0 +1,226 @@
+@page "/"
+@inject CsvDataService DataService
+
+<HeadContent>
+    <meta http-equiv="refresh" content="120" />
+</HeadContent>
+
+@if (!DataService.HasData)
+{
+    <p class="text-muted mt-5 text-center">No data loaded.</p>
+}
+else
+{
+    <form method="get" id="dailyFilter">
+        <input type="hidden" name="users"
+               value="@(_selectedUsers.Count < _allUsers.Count ? string.Join(',', _selectedUsers) : "")" />
+        <div class="mb-2 d-flex align-items-center gap-3 flex-wrap">
+            <div>
+                <label class="form-label fw-bold mb-1">Select Date</label>
+                <select class="form-select w-auto" name="date"
+                        onchange="submitFilter('dailyFilter')">
+                    @foreach (var d in _dates)
+                    {
+                        <option value="@d" selected="@(d == _selectedDate)">@FormatDate(d)</option>
+                    }
+                </select>
+            </div>
+            @if (_totalMinutes > 0)
+            {
+                <div class="mt-3 text-muted small">
+                    <span class="fw-semibold text-body">@Fmt(_totalMinutes)</span> of data
+                </div>
+            }
+        </div>
+    </form>
+
+    @if (_allUsers.Count > 1)
+    {
+        <div class="d-flex flex-wrap gap-1 align-items-center mb-3">
+            <span class="text-muted small me-1">Users:</span>
+            <a href="?date=@_selectedDate"
+               class="badge @(_selectedUsers.Count == _allUsers.Count ? "bg-primary" : "bg-secondary") text-decoration-none me-1">All</a>
+            @foreach (var u in _allUsers)
+            {
+                var isSelected = _selectedUsers.Contains(u.Id);
+                List<string> newList;
+                if (isSelected && _selectedUsers.Count > 1)
+                    newList = _selectedUsers.Where(x => x != u.Id).ToList();
+                else if (!isSelected)
+                    newList = _selectedUsers.Append(u.Id).ToList();
+                else
+                    newList = _selectedUsers.ToList();
+                var href = newList.Count == _allUsers.Count
+                    ? $"?date={_selectedDate}"
+                    : $"?date={_selectedDate}&users={string.Join(',', newList)}";
+                <a href="@href"
+                   class="badge @(isSelected ? "bg-success" : "bg-light text-dark border") text-decoration-none me-1">@u.Label</a>
+            }
+        </div>
+    }
+
+    @if (_rows.Count > 0)
+    {
+        @* ── Table 1: status breakdown ── *@
+        <div class="table-responsive mb-5">
+            <table class="table table-bordered table-sm table-hover align-middle">
+                <thead>
+                    <tr>
+                        <th rowspan="3" class="align-middle table-dark">User</th>
+                        <th rowspan="3" class="align-middle table-success">Available</th>
+                        <th colspan="4" class="text-center table-success">Meeting</th>
+                        <th rowspan="3" class="align-middle table-success">DND</th>
+                        <th rowspan="3" class="align-middle table-success fw-bold">Total<br/>Productive</th>
+                        <th rowspan="3" class="align-middle table-danger">Away</th>
+                        <th rowspan="3" class="align-middle table-danger">Offline</th>
+                        <th rowspan="3" class="align-middle table-danger">Unknown</th>
+                        <th rowspan="3" class="align-middle table-danger fw-bold">Total<br/>Non-Prod</th>
+                    </tr>
+                    <tr>
+                        <th class="text-center table-success" colspan="4">
+                            <small class="text-muted">(Busy subcategories)</small>
+                        </th>
+                    </tr>
+                    <tr>
+                        <th class="table-success">In Call</th>
+                        <th class="table-success">In Conf</th>
+                        <th class="table-success">In Meeting</th>
+                        <th class="table-success">Other</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var r in _rows.Where(r => _selectedUsers.Contains(r.UserId)))
+                    {
+                        var productive = r.Available + r.Busy + r.DoNotDisturb;
+                        var nonProd    = r.Away + r.Offline + r.Unknown;
+                        <tr>
+                            <td class="fw-bold table-dark">@Initials(r.UserId)</td>
+                            <td>@Fmt(r.Available)</td>
+                            <td>@Fmt(r.BusyInCall)</td>
+                            <td>@Fmt(r.BusyInConference)</td>
+                            <td>@Fmt(r.BusyInMeeting)</td>
+                            <td>@Fmt(r.BusyOther)</td>
+                            <td>@Fmt(r.DoNotDisturb)</td>
+                            <td class="fw-bold">@Fmt(productive)</td>
+                            <td>@Fmt(r.Away)</td>
+                            <td>@Fmt(r.Offline)</td>
+                            <td>@Fmt(r.Unknown)</td>
+                            <td class="fw-bold">@Fmt(nonProd)</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+
+        @* ── Table 2: productive time by time-of-day range ── *@
+        @if (_rangeRows.Count > 0)
+        {
+            <h5 class="mb-2">Productive Time by Time of Day</h5>
+            <div class="table-responsive">
+                <table class="table table-bordered table-sm table-hover align-middle">
+                    <thead class="table-secondary">
+                        <tr>
+                            <th>User</th>
+                            <th>6am – 6pm</th>
+                            <th>6pm – 12am</th>
+                            <th>12am – 6am</th>
+                            <th class="fw-bold">Total</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var r in _rangeRows.Where(r => _selectedUsers.Contains(r.UserId)))
+                        {
+                            var total = r.Business + r.Evening + r.Dawn;
+                            <tr>
+                                <td class="fw-bold">@Initials(r.UserId)</td>
+                                <td>@Fmt(r.Business)</td>
+                                <td>@Fmt(r.Evening)</td>
+                                <td>@Fmt(r.Dawn)</td>
+                                <td class="fw-bold">@Fmt(total)</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    }
+    else
+    {
+        <p class="text-muted">No data for selected date.</p>
+    }
+}
+
+@code {
+    [Parameter]
+    [SupplyParameterFromQuery(Name = "date")]
+    public string? DateParam { get; set; }
+
+    [Parameter]
+    [SupplyParameterFromQuery(Name = "users")]
+    public string? UsersParam { get; set; }
+
+    private List<string> _dates = new();
+    private string _selectedDate = "";
+    private List<DailyPresenceRecord> _rows = new();
+    private List<TimeRangeRecord> _rangeRows = new();
+    private int _totalMinutes;
+    private List<(string Id, string Label)> _allUsers = new();
+    private HashSet<string> _selectedUsers = new();
+
+    protected override void OnParametersSet()
+    {
+        if (!DataService.HasData) return;
+
+        _dates = DataService.GetAvailableDates().ToList();
+        _selectedDate = (!string.IsNullOrEmpty(DateParam) && _dates.Contains(DateParam))
+            ? DateParam
+            : (_dates.Count > 0 ? _dates[^1] : "");
+
+        _rows = DataService.GetRecordsForDate(_selectedDate)
+                           .OrderBy(r => Initials(r.UserId)).ToList();
+        _rangeRows = !string.IsNullOrEmpty(_selectedDate)
+            ? DataService.GetProductiveByRange(_selectedDate)
+                         .OrderBy(r => Initials(r.UserId)).ToList()
+            : new();
+        _totalMinutes = DataService.GetTotalMinutesForDate(_selectedDate);
+        _allUsers = _rows.Select(r => (r.UserId, Initials(r.UserId))).ToList();
+
+        _selectedUsers = !string.IsNullOrEmpty(UsersParam)
+            ? new HashSet<string>(UsersParam.Split(',').Where(s => !string.IsNullOrEmpty(s)))
+            : new HashSet<string>(_allUsers.Select(u => u.Id));
+    }
+
+    private static readonly Dictionary<string, string> _initialsMap = new()
+    {
+        ["52333526-20d7-4213-af27-447d72d070c3"] = "AG",
+        ["171f480f-cf1c-4fed-9a78-7057b936792f"] = "CC",
+        ["a166b56d-06d1-409c-a926-b91f2c2f3d51"] = "EMS",
+        ["ef4b1bb3-5bec-44ad-ac91-0d98c6cc4cc5"] = "GS",
+        ["5e356082-ef1a-429b-a389-f0ef66eaae37"] = "JAG",
+        ["a78c4c10-ac09-49a2-82fe-6b519231f521"] = "JD",
+        ["9df94eb6-73d2-4736-8d7c-1c4de0bfbdc8"] = "LER",
+        ["5aa20ed9-a241-4ed5-9d2e-94604b455877"] = "MMT",
+        ["4c97f094-fc22-4814-84c2-802abd80b300"] = "RJO",
+        ["cd0f3b55-257d-4c5d-9bdc-9c6a0905c6fb"] = "VA",
+        ["aa075bf8-f526-4512-a779-98b73c6baa39"] = "MV",
+        ["2f711f1e-785b-4b25-bb56-49dc32a72338"] = "LC",
+    };
+
+    private static string Initials(string userId)
+        => _initialsMap.TryGetValue(userId, out var i) ? i : userId[..8];
+
+    private static string FormatDate(string dateStr)
+        => DateTime.ParseExact(dateStr, "yyyy-MM-dd",
+               System.Globalization.CultureInfo.InvariantCulture)
+               .ToString("ddd, MMM d");
+
+    private static string Fmt(int minutes)
+    {
+        if (minutes == 0) return "0m";
+        var h = minutes / 60;
+        var m = minutes % 60;
+        if (h == 0) return $"{m}m";
+        if (m == 0) return $"{h}h";
+        return $"{h}h {m}m";
+    }
+}

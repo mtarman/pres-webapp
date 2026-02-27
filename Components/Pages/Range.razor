@@ -1,0 +1,176 @@
+@page "/range"
+@inject CsvDataService DataService
+
+<HeadContent>
+    <meta http-equiv="refresh" content="120" />
+</HeadContent>
+
+@if (!DataService.HasData)
+{
+    <p class="text-muted mt-5 text-center">No data loaded — go to <a href="">Daily</a> and open a CSV file first.</p>
+}
+else
+{
+    <form method="get" id="rangeFilter">
+        <div class="mb-3 d-flex flex-wrap align-items-end gap-3">
+            <div>
+                <label class="form-label fw-bold mb-1">From</label>
+                <input type="date" class="form-control" name="from"
+                       min="@_minDate" max="@_maxDate" value="@_fromDate"
+                       onchange="submitFilter('rangeFilter')" />
+            </div>
+            <div>
+                <label class="form-label fw-bold mb-1">To</label>
+                <input type="date" class="form-control" name="to"
+                       min="@_minDate" max="@_maxDate" value="@_toDate"
+                       onchange="submitFilter('rangeFilter')" />
+            </div>
+            @if (_cells.Count > 0)
+            {
+                <a href="/api/export-range?from=@_fromDate&to=@_toDate"
+                   class="btn btn-success mb-0">Export to Excel</a>
+            }
+            else
+            {
+                <button class="btn btn-success mb-0" disabled>Export to Excel</button>
+            }
+        </div>
+    </form>
+
+    @if (_cells.Count > 0)
+    {
+        <div class="table-responsive">
+            <table class="table table-bordered table-sm align-middle range-table">
+                <thead class="table-dark">
+                    <tr>
+                        <th>User</th>
+                        @foreach (var d in _dates)
+                        {
+                            <th class="text-center @(IsWeekend(d) ? "range-weekend-hdr" : "")">
+                                @FormatDateShort(d)
+                            </th>
+                        }
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var user in _users)
+                    {
+                        <tr>
+                            <td class="fw-bold">@Initials(user)</td>
+                            @foreach (var d in _dates)
+                            {
+                                var key = (user, d);
+                                if (_cells.TryGetValue(key, out var rec))
+                                {
+                                    var prod    = rec.Available + rec.Busy + rec.DoNotDisturb;
+                                    var nonProd = rec.Away + rec.Offline + rec.Unknown;
+                                    <td class="text-center range-cell @(IsWeekend(d) ? "range-weekend" : "")">
+                                        <span class="range-prod">@Fmt(prod)</span>
+                                        <span class="range-sep">/</span>
+                                        <span class="range-nonprod">@Fmt(nonProd)</span>
+                                    </td>
+                                }
+                                else
+                                {
+                                    <td class="text-center text-muted @(IsWeekend(d) ? "range-weekend" : "")">—</td>
+                                }
+                            }
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+    else
+    {
+        <p class="text-muted">No data in selected range.</p>
+    }
+}
+
+@code {
+    [Parameter]
+    [SupplyParameterFromQuery(Name = "from")]
+    public string? FromParam { get; set; }
+
+    [Parameter]
+    [SupplyParameterFromQuery(Name = "to")]
+    public string? ToParam { get; set; }
+
+    private string _minDate = "";
+    private string _maxDate = "";
+    private string _fromDate = "";
+    private string _toDate = "";
+
+    private List<string> _dates = new();
+    private List<string> _users = new();
+    private Dictionary<(string UserId, string Date), DailyPresenceRecord> _cells = new();
+
+    protected override void OnParametersSet()
+    {
+        if (!DataService.HasData) return;
+
+        var all = DataService.GetAvailableDates();
+        if (all.Count == 0) return;
+
+        _minDate = all[0];
+        _maxDate = all[^1];
+
+        _fromDate = !string.IsNullOrEmpty(FromParam) ? FromParam : _minDate;
+        _toDate   = !string.IsNullOrEmpty(ToParam)   ? ToParam   : _maxDate;
+
+        // Clamp to available range
+        if (string.Compare(_fromDate, _minDate, StringComparison.Ordinal) < 0) _fromDate = _minDate;
+        if (string.Compare(_fromDate, _maxDate, StringComparison.Ordinal) > 0) _fromDate = _maxDate;
+        if (string.Compare(_toDate,   _minDate, StringComparison.Ordinal) < 0) _toDate   = _minDate;
+        if (string.Compare(_toDate,   _maxDate, StringComparison.Ordinal) > 0) _toDate   = _maxDate;
+        if (string.Compare(_fromDate, _toDate,  StringComparison.Ordinal) > 0) _toDate   = _fromDate;
+
+        var records = DataService.GetRecordsForRange(_fromDate, _toDate);
+        _dates = records.Select(r => r.DateLocal).Distinct().OrderBy(d => d).ToList();
+        _users = records.Select(r => r.UserId).Distinct().OrderBy(u => Initials(u)).ToList();
+        _cells = records.ToDictionary(r => (r.UserId, r.DateLocal));
+    }
+
+    private static readonly Dictionary<string, string> _initialsMap = new()
+    {
+        ["52333526-20d7-4213-af27-447d72d070c3"] = "AG",
+        ["171f480f-cf1c-4fed-9a78-7057b936792f"] = "CC",
+        ["a166b56d-06d1-409c-a926-b91f2c2f3d51"] = "EMS",
+        ["ef4b1bb3-5bec-44ad-ac91-0d98c6cc4cc5"] = "GS",
+        ["5e356082-ef1a-429b-a389-f0ef66eaae37"] = "JAG",
+        ["a78c4c10-ac09-49a2-82fe-6b519231f521"] = "JD",
+        ["9df94eb6-73d2-4736-8d7c-1c4de0bfbdc8"] = "LER",
+        ["5aa20ed9-a241-4ed5-9d2e-94604b455877"] = "MMT",
+        ["4c97f094-fc22-4814-84c2-802abd80b300"] = "RJO",
+        ["cd0f3b55-257d-4c5d-9bdc-9c6a0905c6fb"] = "VA",
+        ["aa075bf8-f526-4512-a779-98b73c6baa39"] = "MV",
+        ["2f711f1e-785b-4b25-bb56-49dc32a72338"] = "LC",
+    };
+
+    private static string Initials(string userId)
+        => _initialsMap.TryGetValue(userId, out var i) ? i : userId[..8];
+
+    private static bool IsWeekend(string dateStr)
+    {
+        var dow = DateTime.ParseExact(dateStr, "yyyy-MM-dd",
+                      System.Globalization.CultureInfo.InvariantCulture).DayOfWeek;
+        return dow is DayOfWeek.Saturday or DayOfWeek.Sunday;
+    }
+
+    private static string FormatDateShort(string dateStr)
+    {
+        var dt = DateTime.ParseExact(dateStr, "yyyy-MM-dd",
+                     System.Globalization.CultureInfo.InvariantCulture);
+        return dt.ToString("ddd MMM d");
+    }
+
+    private static string Fmt(int minutes)
+    {
+        if (minutes == 0) return "0m";
+        var h = minutes / 60;
+        var m = minutes % 60;
+        if (h == 0) return $"{m}m";
+        if (m == 0) return $"{h}h";
+        return $"{h}h {m}m";
+    }
+}

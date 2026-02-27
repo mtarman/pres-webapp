@@ -1,0 +1,31 @@
+@inherits LayoutComponentBase
+
+@if (_authorized)
+{
+    <div class="page">
+        <div class="sidebar">
+            <NavMenu />
+        </div>
+
+        <main>
+            <article class="content px-4">
+                @Body
+            </article>
+        </main>
+    </div>
+}
+else
+{
+    <p class="m-4">Not available.</p>
+}
+
+@code {
+    private static readonly HashSet<string> _allowedUsers = new(StringComparer.OrdinalIgnoreCase)
+    {
+        @"millerandlents\esurles",
+        @"millerandlents\mtarman",
+    };
+
+    private static readonly bool _authorized =
+        _allowedUsers.Contains($@"{Environment.UserDomainName}\{Environment.UserName}");
+}

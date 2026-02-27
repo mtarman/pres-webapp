@@ -1,0 +1,47 @@
+@inject CsvDataService DataService
+
+<input type="checkbox" title="Navigation menu" class="navbar-toggler" />
+
+<div class="nav-scrollable" onclick="document.querySelector('.navbar-toggler').click()">
+    <nav class="nav flex-column">
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="timeline">
+                <span class="bi bi-bar-chart-fill-nav-menu" aria-hidden="true"></span> Timeline
+            </NavLink>
+        </div>
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="" Match="NavLinkMatch.All">
+                <span class="bi bi-house-door-fill-nav-menu" aria-hidden="true"></span> Daily
+            </NavLink>
+        </div>
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="range">
+                <span class="bi bi-calendar3-nav-menu" aria-hidden="true"></span> Range
+            </NavLink>
+        </div>
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="weekly">
+                <span class="bi bi-calendar-week-nav-menu" aria-hidden="true"></span> Weekly
+            </NavLink>
+        </div>
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="monthly">
+                <span class="bi bi-calendar-month-nav-menu" aria-hidden="true"></span> Monthly
+            </NavLink>
+        </div>
+        <div class="nav-item px-3" style="margin-top:auto; border-top:1px solid rgba(255,255,255,0.15); padding-top:0.5rem;">
+            <span class="nav-link" style="opacity:0.35; cursor:default;">
+                <span class="bi bi-folder-open-nav-menu" aria-hidden="true"></span> Load Data
+            </span>
+        </div>
+        <div class="nav-item px-3">
+            <button class="nav-link btn btn-link w-100 text-start"
+                    disabled="true"
+                    style="opacity:0.35; cursor:default;"
+                    title="Auto-refreshes every 2 minutes">
+                <span class="bi bi-arrow-clockwise-nav-menu" aria-hidden="true"></span> Refresh
+            </button>
+        </div>
+
+    </nav>
+</div>

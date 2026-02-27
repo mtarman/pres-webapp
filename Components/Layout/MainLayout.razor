@@ -1,6 +1,11 @@
 @inherits LayoutComponentBase
+@inject IJSRuntime JS
 
-@if (_authorized)
+@if (_checking)
+{
+    @* blank while checking session storage *@
+}
+else if (_authorized)
 {
     <div class="page">
         <div class="sidebar">
@@ -16,16 +21,54 @@
 }
 else
 {
-    <p class="m-4">Not available.</p>
+    <div style="max-width:320px;margin:80px auto;">
+        <h5>Enter password to continue</h5>
+        <input type="password" class="form-control mb-2" @bind="_input" @bind:event="oninput" @onkeydown="OnKeyDown" />
+        @if (_wrong)
+        {
+            <p class="text-danger small">Incorrect password.</p>
+        }
+        <button class="btn btn-primary" @onclick="Submit">Submit</button>
+    </div>
 }
 
 @code {
-    private static readonly HashSet<string> _allowedUsers = new(StringComparer.OrdinalIgnoreCase)
-    {
-        @"millerandlents\esurles",
-        @"millerandlents\mtarman",
-    };
+    private const string Password = "mlpres";
+    private const string SessionKey = "pres_auth";
 
-    private static readonly bool _authorized =
-        _allowedUsers.Contains($@"{Environment.UserDomainName}\{Environment.UserName}");
+    private bool _checking = true;
+    private bool _authorized;
+    private string _input = "";
+    private bool _wrong;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            var stored = await JS.InvokeAsync<string?>("sessionStorage.getItem", SessionKey);
+            _authorized = stored == "1";
+            _checking = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task Submit()
+    {
+        if (_input == Password)
+        {
+            await JS.InvokeVoidAsync("sessionStorage.setItem", SessionKey, "1");
+            _authorized = true;
+            _wrong = false;
+        }
+        else
+        {
+            _wrong = true;
+            _input = "";
+        }
+    }
+
+    private async Task OnKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") await Submit();
+    }
 }

@@ -6,7 +6,6 @@ using ClosedXML.Excel;
 var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddRazorComponents().AddInteractiveServerComponents();
 builder.Services.AddSingleton<CsvDataService>();
-
 var app = builder.Build();
 app.UseStaticFiles();
 app.UseAntiforgery();

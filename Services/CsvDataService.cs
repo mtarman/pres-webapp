@@ -5,7 +5,7 @@ namespace PresAnalysis.Services;
 
 public class CsvDataService
 {
-    private const string AutoLoadPath = @"\\mltools\c$\Users\mll_admin\Documents\pres\presence_log.csv";
+    private const string AutoLoadPath = @"C:\Users\mll_admin\Documents\pres\presence_log.csv";
 
     private List<(DateTime Ts, int PollMinutes, string UserId, string Availability, string Activity)>? _logCache;
     private string? _lastFilePath;

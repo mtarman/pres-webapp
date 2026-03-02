@@ -38,7 +38,7 @@ else
     {
         <div class="d-flex flex-wrap gap-1 align-items-center mb-3">
             <span class="text-muted small me-1">Users:</span>
-            <a href="/weekly?week=@_selectedWeek"
+            <a href="weekly?week=@_selectedWeek"
                class="badge @(_selectedUsers.Count == _allUsers.Count ? "bg-primary" : "bg-secondary") text-decoration-none me-1">All</a>
             @foreach (var u in _allUsers)
             {
@@ -51,8 +51,8 @@ else
                 else
                     newList = _selectedUsers.ToList();
                 var href = newList.Count == _allUsers.Count
-                    ? $"/weekly?week={_selectedWeek}"
-                    : $"/weekly?week={_selectedWeek}&users={string.Join(',', newList)}";
+                    ? $"weekly?week={_selectedWeek}"
+                    : $"weekly?week={_selectedWeek}&users={string.Join(',', newList)}";
                 <a href="@href"
                    class="badge @(isSelected ? "bg-success" : "bg-light text-dark border") text-decoration-none me-1">@u.Label</a>
             }

@@ -85,6 +85,62 @@ else
     {
         <p class="text-muted">No data in selected range.</p>
     }
+
+    @if (_timelineByDate.Count > 0)
+    {
+        <hr class="my-4" />
+        <h6 class="mb-3 text-muted">Daily Timelines</h6>
+
+        @* Legend *@
+        <div class="d-flex gap-3 small align-items-center flex-wrap mb-3">
+            <span><span class="legend-box bg-available"></span> Available</span>
+            <span><span class="legend-box bg-meeting"></span> Meeting / DND</span>
+            <span><span class="legend-box bg-inactive"></span> Away / Offline / Unknown</span>
+            <span><span class="legend-box bg-nodata"></span> No data</span>
+        </div>
+
+        @foreach (var date in _dates)
+        {
+            if (!_timelineByDate.TryGetValue(date, out var userRows) || userRows.Count == 0)
+                continue;
+
+            <div class="mb-4">
+                <div class="fw-semibold small text-secondary mb-1">@FormatDateShort(date)</div>
+
+                @* Hour axis *@
+                <div class="timeline-axis mb-1">
+                    @for (int h = 0; h <= 24; h++)
+                    {
+                        var pct = h / 24.0 * 100;
+                        string label;
+                        if (h == 0 || h == 24) label = "12a";
+                        else if (h == 12)      label = "12p";
+                        else if (h < 12)       label = $"{h}a";
+                        else                   label = $"{h - 12}p";
+                        <span class="axis-tick" style="left:@(pct.ToString("F2", System.Globalization.CultureInfo.InvariantCulture))%">@label</span>
+                    }
+                </div>
+
+                @* One bar per user *@
+                <div class="timeline-rows mb-2">
+                    @foreach (var kvp in userRows)
+                    {
+                        <div class="timeline-row">
+                            <div class="timeline-label">@Initials(kvp.Key)</div>
+                            <div class="timeline-bar-outer">
+                                @foreach (var seg in kvp.Value)
+                                {
+                                    <div class="timeline-seg @ColorClass(seg.Availability)"
+                                         style="left:@(seg.Left)%;width:@(seg.Width)%"
+                                         title="@seg.Availability @seg.Ts.ToString("HH:mm")"></div>
+                                }
+                            </div>
+                        </div>
+                    }
+                </div>
+            </div>
+        }
+    }
 }
 
 @code {
@@ -101,9 +157,12 @@ else
     private string _fromDate = "";
     private string _toDate = "";
 
+    private record Segment(DateTime Ts, double Left, double Width, string Availability);
+
     private List<string> _dates = new();
     private List<string> _users = new();
     private Dictionary<(string UserId, string Date), DailyPresenceRecord> _cells = new();
+    private Dictionary<string, Dictionary<string, List<Segment>>> _timelineByDate = new();
 
     protected override void OnParametersSet()
     {
@@ -129,7 +188,30 @@ else
         _dates = records.Select(r => r.DateLocal).Distinct().OrderBy(d => d).ToList();
         _users = records.Select(r => r.UserId).Distinct().OrderBy(u => Initials(u)).ToList();
         _cells = records.ToDictionary(r => (r.UserId, r.DateLocal));
+
+        _timelineByDate = _dates.ToDictionary(
+            date => date,
+            date => DataService.GetTimelineForDate(date)
+                .GroupBy(e => e.UserId)
+                .OrderBy(g => Initials(g.Key))
+                .ToDictionary(
+                    g => g.Key,
+                    g => g.OrderBy(e => e.Ts)
+                           .Select(e => new Segment(
+                               e.Ts,
+                               (e.Ts.Hour * 60 + e.Ts.Minute) / 1440.0 * 100,
+                               e.PollMinutes / 1440.0 * 100,
+                               e.Availability))
+                           .ToList()));
     }
+
+    private static string ColorClass(string avail) => avail switch
+    {
+        "Available" or "AvailableIdle"                      => "seg-available",
+        "Busy" or "BusyIdle"
+            or "DoNotDisturb" or "DoNotDisturbIdle"         => "seg-meeting",
+        _                                                    => "seg-inactive",
+    };
 
     private static readonly Dictionary<string, string> _initialsMap = new()
     {

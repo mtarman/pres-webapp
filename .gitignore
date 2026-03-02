@@ -1,0 +1,23 @@
+# .NET / MAUI
+bin/
+obj/
+.vs/
+*.user
+*.suo
+webapp
+
+# MAUI generated
+Platforms/*/bin/
+Platforms/*/obj/
+
+# SQLite databases
+*.db
+*.sqlite
+
+# Secrets
+appsettings.json
+*.env
+
+# OS
+.DS_Store
+Thumbs.db

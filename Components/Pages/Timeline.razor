@@ -183,7 +183,7 @@ else
     {
         if (!DataService.HasData) return;
 
-        _dates = DataService.GetAvailableDates().ToList();
+        _dates = DataService.GetAvailableDates().AsEnumerable().Reverse().ToList();
         _selectedDate = (!string.IsNullOrEmpty(DateParam) && _dates.Contains(DateParam))
             ? DateParam
             : (_dates.Count > 0 ? _dates[^1] : "");

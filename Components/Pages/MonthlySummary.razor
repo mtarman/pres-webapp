@@ -171,7 +171,7 @@ else
     {
         if (!DataService.HasData) return;
 
-        _months = DataService.GetAvailableMonths().ToList();
+        _months = DataService.GetAvailableMonths().AsEnumerable().Reverse().ToList();
         _selectedMonth = (!string.IsNullOrEmpty(MonthParam) && _months.Contains(MonthParam))
             ? MonthParam
             : (_months.Count > 0 ? _months[^1] : "");

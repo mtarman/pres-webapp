@@ -174,7 +174,7 @@ else
         _weeks = DataService.GetAvailableWeeks().AsEnumerable().Reverse().ToList();
         _selectedWeek = (!string.IsNullOrEmpty(WeekParam) && _weeks.Contains(WeekParam))
             ? WeekParam
-            : (_weeks.Count > 0 ? _weeks[^1] : "");
+            : (_weeks.Count > 0 ? _weeks[0] : "");
 
         _rows = DataService.GetRecordsForWeek(_selectedWeek)
                            .OrderBy(r => Initials(r.UserId)).ToList();

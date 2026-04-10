@@ -174,7 +174,7 @@ else
         _months = DataService.GetAvailableMonths().AsEnumerable().Reverse().ToList();
         _selectedMonth = (!string.IsNullOrEmpty(MonthParam) && _months.Contains(MonthParam))
             ? MonthParam
-            : (_months.Count > 0 ? _months[^1] : "");
+            : (_months.Count > 0 ? _months[0] : "");
 
         _rows = DataService.GetRecordsForMonth(_selectedMonth)
                            .OrderBy(r => Initials(r.UserId)).ToList();

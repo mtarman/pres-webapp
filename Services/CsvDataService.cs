@@ -6,6 +6,7 @@ namespace PresAnalysis.Services;
 public class CsvDataService
 {
     private const string AutoLoadPath = @"C:\Users\mll_admin\Documents\pres\presence_log.csv";
+    private const string DevelopmentAutoLoadPath = @"D:\blazorcode\data\presence_log.csv";
 
     private List<(DateTime Ts, int PollMinutes, string UserId, string Availability, string Activity)>? _logCache;
     private string? _lastFilePath;
@@ -17,14 +18,26 @@ public class CsvDataService
 
     public CsvDataService()
     {
-        if (File.Exists(AutoLoadPath))
-            LoadFromPath(AutoLoadPath);
+        var initialPath = ResolveAutoLoadPath();
+        if (initialPath != null)
+            LoadFromPath(initialPath);
 
         // Auto-refresh every 2 minutes
         var timer = new System.Timers.Timer(TimeSpan.FromMinutes(2).TotalMilliseconds);
         timer.Elapsed += (_, _) => { try { Reload(); } catch { /* file temporarily unavailable */ } };
         timer.AutoReset = true;
         timer.Start();
+    }
+
+    private static string? ResolveAutoLoadPath()
+    {
+        if (File.Exists(AutoLoadPath))
+            return AutoLoadPath;
+
+        if (File.Exists(DevelopmentAutoLoadPath))
+            return DevelopmentAutoLoadPath;
+
+        return null;
     }
 
     public void LoadFromPath(string path)

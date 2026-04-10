@@ -12,6 +12,8 @@
 else
 {
     <form method="get" id="rangeFilter">
+        <input type="hidden" name="users"
+               value="@(_selectedUsers.Count < _allUsers.Count ? string.Join(',', _selectedUsers) : "")" />
         <div class="mb-3 d-flex flex-wrap align-items-end gap-3">
             <div>
                 <label class="form-label fw-bold mb-1">From</label>
@@ -37,6 +39,31 @@ else
         </div>
     </form>
 
+    @if (_allUsers.Count > 1)
+    {
+        <div class="d-flex flex-wrap gap-1 align-items-center mb-3">
+            <span class="text-muted small me-1">Users:</span>
+            <a href="range?from=@_fromDate&to=@_toDate"
+               class="badge @(_selectedUsers.Count == _allUsers.Count ? "bg-primary" : "bg-secondary") text-decoration-none me-1">All</a>
+            @foreach (var u in _allUsers)
+            {
+                var isSelected = _selectedUsers.Contains(u.Id);
+                List<string> newList;
+                if (isSelected && _selectedUsers.Count > 1)
+                    newList = _selectedUsers.Where(x => x != u.Id).ToList();
+                else if (!isSelected)
+                    newList = _selectedUsers.Append(u.Id).ToList();
+                else
+                    newList = _selectedUsers.ToList();
+                var href = newList.Count == _allUsers.Count
+                    ? $"range?from={_fromDate}&to={_toDate}"
+                    : $"range?from={_fromDate}&to={_toDate}&users={string.Join(',', newList)}";
+                <a href="@href"
+                   class="badge @(isSelected ? "bg-success" : "bg-light text-dark border") text-decoration-none me-1">@u.Label</a>
+            }
+        </div>
+    }
+
     @if (_cells.Count > 0)
     {
         <div class="table-responsive">
@@ -53,7 +80,7 @@ else
                     </tr>
                 </thead>
                 <tbody>
-                    @foreach (var user in _users)
+                    @foreach (var user in _users.Where(u => _selectedUsers.Contains(u)))
                     {
                         <tr>
                             <td class="fw-bold">@Initials(user)</td>
@@ -125,6 +152,9 @@ else
                 <div class="timeline-rows mb-2">
                     @foreach (var kvp in userRows)
                     {
+                        if (!_selectedUsers.Contains(kvp.Key))
+                            continue;
+
                         <div class="timeline-row">
                             <div class="timeline-label">@Initials(kvp.Key)</div>
                             <div class="timeline-bar-outer">
@@ -152,6 +182,10 @@ else
     [SupplyParameterFromQuery(Name = "to")]
     public string? ToParam { get; set; }
 
+    [Parameter]
+    [SupplyParameterFromQuery(Name = "users")]
+    public string? UsersParam { get; set; }
+
     private string _minDate = "";
     private string _maxDate = "";
     private string _fromDate = "";
@@ -161,6 +195,8 @@ else
 
     private List<string> _dates = new();
     private List<string> _users = new();
+    private List<(string Id, string Label)> _allUsers = new();
+    private HashSet<string> _selectedUsers = new();
     private Dictionary<(string UserId, string Date), DailyPresenceRecord> _cells = new();
     private Dictionary<string, Dictionary<string, List<Segment>>> _timelineByDate = new();
 
@@ -174,8 +210,17 @@ else
         _minDate = all[0];
         _maxDate = all[^1];
 
-        _fromDate = !string.IsNullOrEmpty(FromParam) ? FromParam : _minDate;
-        _toDate   = !string.IsNullOrEmpty(ToParam)   ? ToParam   : _maxDate;
+        _toDate = !string.IsNullOrEmpty(ToParam) ? ToParam : _maxDate;
+
+        if (!string.IsNullOrEmpty(FromParam))
+        {
+            _fromDate = FromParam;
+        }
+        else
+        {
+            var defaultStartIndex = Math.Max(0, all.Count - 7);
+            _fromDate = all[defaultStartIndex];
+        }
 
         // Clamp to available range
         if (string.Compare(_fromDate, _minDate, StringComparison.Ordinal) < 0) _fromDate = _minDate;
@@ -187,6 +232,10 @@ else
         var records = DataService.GetRecordsForRange(_fromDate, _toDate);
         _dates = records.Select(r => r.DateLocal).Distinct().OrderBy(d => d).ToList();
         _users = records.Select(r => r.UserId).Distinct().OrderBy(u => Initials(u)).ToList();
+        _allUsers = _users.Select(u => (u, Initials(u))).ToList();
+        _selectedUsers = !string.IsNullOrEmpty(UsersParam)
+            ? new HashSet<string>(UsersParam.Split(',').Where(s => !string.IsNullOrEmpty(s)))
+            : new HashSet<string>(_allUsers.Select(u => u.Id));
         _cells = records.ToDictionary(r => (r.UserId, r.DateLocal));
 
         _timelineByDate = _dates.ToDictionary(

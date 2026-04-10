@@ -2,13 +2,16 @@ using PresAnalysis;
 using PresAnalysis.Models;
 using PresAnalysis.Services;
 using ClosedXML.Excel;
+using Microsoft.AspNetCore.Hosting.StaticWebAssets;
 
 var builder = WebApplication.CreateBuilder(args);
+StaticWebAssetsLoader.UseStaticWebAssets(builder.Environment, builder.Configuration);
 builder.Services.AddRazorComponents().AddInteractiveServerComponents();
 builder.Services.AddSingleton<CsvDataService>();
 var app = builder.Build();
-app.UseStaticFiles();
+app.UsePathBase("/pres");
 app.UseAntiforgery();
+app.MapStaticAssets();
 app.MapRazorComponents<App>().AddInteractiveServerRenderMode();
 
 app.MapPost("/api/upload-csv", async (HttpRequest request, CsvDataService dataService) =>

@@ -1,9 +1,13 @@
 @inherits LayoutComponentBase
 @inject IJSRuntime JS
+@inject IWebHostEnvironment Env
+@inject NavigationManager Nav
 
 @if (_checking)
 {
-    @* blank while checking session storage *@
+    <div style="max-width:320px;margin:80px auto;" class="text-center text-muted">
+        Loading...
+    </div>
 }
 else if (_authorized)
 {
@@ -41,9 +45,18 @@ else
     private string _input = "";
     private bool _wrong;
 
+    protected override void OnInitialized()
+    {
+        if (ShouldBypassAuthLocally())
+        {
+            _authorized = true;
+            _checking = false;
+        }
+    }
+
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (firstRender)
+        if (firstRender && !ShouldBypassAuthLocally())
         {
             var stored = await JS.InvokeAsync<string?>("sessionStorage.getItem", SessionKey);
             _authorized = stored == "1";
@@ -70,5 +83,15 @@ else
     private async Task OnKeyDown(KeyboardEventArgs e)
     {
         if (e.Key == "Enter") await Submit();
+    }
+
+    private bool ShouldBypassAuthLocally()
+    {
+        if (Env.IsDevelopment())
+            return true;
+
+        return Uri.TryCreate(Nav.Uri, UriKind.Absolute, out var uri)
+            && (uri.Host.Equals("localhost", StringComparison.OrdinalIgnoreCase)
+                || uri.Host.Equals("127.0.0.1"));
     }
 }

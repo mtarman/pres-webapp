@@ -16,7 +16,17 @@ else
                value="@(_selectedUsers.Count < _allUsers.Count ? string.Join(',', _selectedUsers) : "")" />
         <div class="mb-2 d-flex align-items-center gap-3 flex-wrap">
             <div>
-                <label class="form-label fw-bold mb-1">Select Date</label>
+                <label class="form-label fw-bold mb-1 d-flex align-items-center gap-2">
+                    <span>Select Date</span>
+                    @if (!string.IsNullOrEmpty(_previousDateHref))
+                    {
+                        <a href="@_previousDateHref" class="btn btn-sm btn-outline-secondary py-0 px-2" title="Previous date" aria-label="Previous date">&larr;</a>
+                    }
+                    @if (!string.IsNullOrEmpty(_nextDateHref))
+                    {
+                        <a href="@_nextDateHref" class="btn btn-sm btn-outline-secondary py-0 px-2" title="Next date" aria-label="Next date">&rarr;</a>
+                    }
+                </label>
                 <select class="form-select w-auto" name="date"
                         onchange="submitFilter('timelineFilter')">
                     @foreach (var d in _dates)
@@ -178,6 +188,8 @@ else
     private List<DailyPresenceRecord> _rows = new();
     private List<(string Id, string Label)> _allUsers = new();
     private HashSet<string> _selectedUsers = new();
+    private string? _previousDateHref;
+    private string? _nextDateHref;
 
     protected override void OnParametersSet()
     {
@@ -186,7 +198,7 @@ else
         _dates = DataService.GetAvailableDates().AsEnumerable().Reverse().ToList();
         _selectedDate = (!string.IsNullOrEmpty(DateParam) && _dates.Contains(DateParam))
             ? DateParam
-            : (_dates.Count > 0 ? _dates[^1] : "");
+            : (_dates.Count > 0 ? _dates[0] : "");
 
         BuildRows(_selectedDate);
         _totalMinutes = DataService.GetTotalMinutesForDate(_selectedDate);
@@ -199,6 +211,8 @@ else
         _selectedUsers = !string.IsNullOrEmpty(UsersParam)
             ? new HashSet<string>(UsersParam.Split(',').Where(s => !string.IsNullOrEmpty(s)))
             : new HashSet<string>(_allUsers.Select(u => u.Id));
+
+        SetDateNavigationLinks();
     }
 
     private void BuildRows(string date)
@@ -247,6 +261,30 @@ else
 
     private static string Initials(string userId)
         => _initialsMap.TryGetValue(userId, out var i) ? i : userId[..8];
+
+    private void SetDateNavigationLinks()
+    {
+        _previousDateHref = null;
+        _nextDateHref = null;
+
+        var selectedIndex = _dates.IndexOf(_selectedDate);
+        if (selectedIndex < 0)
+            return;
+
+        if (selectedIndex < _dates.Count - 1)
+            _previousDateHref = BuildTimelineHref(_dates[selectedIndex + 1]);
+
+        if (selectedIndex > 0)
+            _nextDateHref = BuildTimelineHref(_dates[selectedIndex - 1]);
+    }
+
+    private string BuildTimelineHref(string date)
+    {
+        if (_selectedUsers.Count == 0 || _selectedUsers.Count == _allUsers.Count)
+            return $"timeline?date={date}";
+
+        return $"timeline?date={date}&users={string.Join(',', _selectedUsers)}";
+    }
 
     private static string FormatDate(string dateStr)
         => DateTime.ParseExact(dateStr, "yyyy-MM-dd",

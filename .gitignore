@@ -23,3 +23,5 @@ appsettings.json
 Thumbs.db
 bin/
 obj/
+publish/
+*.exe

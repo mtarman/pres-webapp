@@ -29,11 +29,15 @@
                 <span class="bi bi-calendar-month-nav-menu" aria-hidden="true"></span> Monthly
             </NavLink>
         </div>
-        <div class="nav-item px-3" style="margin-top:auto; border-top:1px solid rgba(255,255,255,0.15); padding-top:0.5rem;">
-            <span class="nav-link" style="opacity:0.35; cursor:default;">
-                <span class="bi bi-folder-open-nav-menu" aria-hidden="true"></span> Load Data
-            </span>
-        </div>
+        <AuthorizeView Policy="AdminOnly">
+            <Authorized>
+                <div class="nav-item px-3" style="margin-top:auto; border-top:1px solid rgba(255,255,255,0.15); padding-top:0.5rem;">
+                    <NavLink class="nav-link" href="admin">
+                        <span class="bi bi-folder-open-nav-menu" aria-hidden="true"></span> Admin
+                    </NavLink>
+                </div>
+            </Authorized>
+        </AuthorizeView>
         <div class="nav-item px-3">
             <button class="nav-link btn btn-link w-100 text-start"
                     disabled="true"
@@ -41,6 +45,12 @@
                     title="Auto-refreshes every 2 minutes">
                 <span class="bi bi-arrow-clockwise-nav-menu" aria-hidden="true"></span> Refresh
             </button>
+        </div>
+
+        <div class="nav-item px-3">
+            <form action="/pres/logout" method="post">
+                <button class="nav-link btn btn-link w-100 text-start" type="submit">Sign out</button>
+            </form>
         </div>
 
     </nav>

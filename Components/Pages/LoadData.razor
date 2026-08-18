@@ -1,7 +1,52 @@
+@page "/admin"
 @page "/load"
+@attribute [Authorize(Policy = "AdminOnly")]
 @inject CsvDataService DataService
+@inject PersistentSettingsService Settings
 
-<div class="mt-4" style="max-width:500px">
+<div class="mt-4" style="max-width:650px">
+    <h1 class="mb-4">Admin</h1>
+
+    <section class="card mb-4">
+        <div class="card-body">
+            <h2 class="h5 card-title">Users shown in graphs</h2>
+            <p class="text-muted small">
+                Turn users off to remove them from all graphs, summaries, tables, and exports for everyone.
+            </p>
+
+            @if (_users.Count == 0)
+            {
+                <p class="text-muted mb-0">Load data to configure users.</p>
+            }
+            else
+            {
+                <div class="row g-2 mb-3">
+                    @foreach (var userId in _users)
+                    {
+                        <div class="col-sm-6">
+                            <div class="form-check form-switch">
+                                <input class="form-check-input"
+                                       type="checkbox"
+                                       id="user-@userId"
+                                       checked="@_enabledUserIds.Contains(userId)"
+                                       @onchange="args => SetUserEnabled(userId, args)" />
+                                <label class="form-check-label" for="user-@userId">
+                                    @UserLabel(userId)
+                                </label>
+                            </div>
+                        </div>
+                    }
+                </div>
+
+                <button class="btn btn-primary" @onclick="SaveVisibility">Save user visibility</button>
+                @if (_settingsSaved)
+                {
+                    <span class="text-success ms-3">Saved for all users.</span>
+                }
+            }
+        </div>
+    </section>
+
     @if (DataService.HasData)
     {
         <div class="alert alert-success mb-4">
@@ -18,3 +63,54 @@
         </form>
     </div>
 </div>
+
+@code {
+    private List<string> _users = new();
+    private HashSet<string> _enabledUserIds = new(StringComparer.Ordinal);
+    private bool _settingsSaved;
+
+    protected override void OnInitialized()
+    {
+        _users = DataService.GetAvailableUsers().ToList();
+        var disabled = Settings.GetDisabledUserIds();
+        _enabledUserIds = _users
+            .Where(userId => !disabled.Contains(userId))
+            .ToHashSet(StringComparer.Ordinal);
+    }
+
+    private void SetUserEnabled(string userId, ChangeEventArgs args)
+    {
+        _settingsSaved = false;
+        if (args.Value is true)
+            _enabledUserIds.Add(userId);
+        else
+            _enabledUserIds.Remove(userId);
+    }
+
+    private void SaveVisibility()
+    {
+        Settings.SetDisabledUserIds(_users.Where(userId => !_enabledUserIds.Contains(userId)));
+        _settingsSaved = true;
+    }
+
+    private static string UserLabel(string userId)
+        => _initialsMap.TryGetValue(userId, out var initials)
+            ? initials
+            : userId.Length > 8 ? userId[..8] : userId;
+
+    private static readonly Dictionary<string, string> _initialsMap = new()
+    {
+        ["52333526-20d7-4213-af27-447d72d070c3"] = "AG",
+        ["171f480f-cf1c-4fed-9a78-7057b936792f"] = "CC",
+        ["a166b56d-06d1-409c-a926-b91f2c2f3d51"] = "EMS",
+        ["ef4b1bb3-5bec-44ad-ac91-0d98c6cc4cc5"] = "GS",
+        ["5e356082-ef1a-429b-a389-f0ef66eaae37"] = "JAG",
+        ["a78c4c10-ac09-49a2-82fe-6b519231f521"] = "JD",
+        ["9df94eb6-73d2-4736-8d7c-1c4de0bfbdc8"] = "LER",
+        ["5aa20ed9-a241-4ed5-9d2e-94604b455877"] = "MMT",
+        ["4c97f094-fc22-4814-84c2-802abd80b300"] = "RJO",
+        ["cd0f3b55-257d-4c5d-9bdc-9c6a0905c6fb"] = "VA",
+        ["aa075bf8-f526-4512-a779-98b73c6baa39"] = "MV",
+        ["2f711f1e-785b-4b25-bb56-49dc32a72338"] = "LC",
+    };
+}

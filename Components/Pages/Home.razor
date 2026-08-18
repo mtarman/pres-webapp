@@ -172,9 +172,12 @@ else
         if (!DataService.HasData) return;
 
         _dates = DataService.GetAvailableDates().AsEnumerable().Reverse().ToList();
+        var currentMonth = DateTime.Now.ToString("yyyy-MM");
+        var defaultDate = _dates.FirstOrDefault(d => d.StartsWith(currentMonth, StringComparison.Ordinal))
+            ?? (_dates.Count > 0 ? _dates[0] : "");
         _selectedDate = (!string.IsNullOrEmpty(DateParam) && _dates.Contains(DateParam))
             ? DateParam
-            : (_dates.Count > 0 ? _dates[0] : "");
+            : defaultDate;
 
         _rows = DataService.GetRecordsForDate(_selectedDate)
                            .OrderBy(r => Initials(r.UserId)).ToList();

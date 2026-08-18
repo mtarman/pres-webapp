@@ -1,97 +1,29 @@
 @inherits LayoutComponentBase
-@inject IJSRuntime JS
-@inject IWebHostEnvironment Env
-@inject NavigationManager Nav
 
-@if (_checking)
-{
-    <div style="max-width:320px;margin:80px auto;" class="text-center text-muted">
-        Loading...
-    </div>
-}
-else if (_authorized)
-{
-    <div class="page">
-        <div class="sidebar">
-            <NavMenu />
+<AuthorizeView>
+    <Authorized>
+        <div class="page">
+            <div class="sidebar">
+                <NavMenu />
+            </div>
+
+            <main>
+                <article class="content px-4">
+                    @Body
+                </article>
+            </main>
         </div>
-
-        <main>
-            <article class="content px-4">
-                @Body
-            </article>
-        </main>
-    </div>
-}
-else
-{
-    <div style="max-width:320px;margin:80px auto;">
-        <h5>Enter password to continue</h5>
-        <input type="password" class="form-control mb-2" @bind="_input" @bind:event="oninput" @onkeydown="OnKeyDown" />
-        @if (_wrong)
-        {
-            <p class="text-danger small">Incorrect password.</p>
-        }
-        <button class="btn btn-primary" @onclick="Submit">Submit</button>
-    </div>
-}
-
-@code {
-    private const string Password = "mlpres";
-    private const string SessionKey = "pres_auth";
-
-    private bool _checking = true;
-    private bool _authorized;
-    private string _input = "";
-    private bool _wrong;
-
-    protected override void OnInitialized()
-    {
-        if (ShouldBypassAuthLocally())
-        {
-            _authorized = true;
-            _checking = false;
-        }
-    }
-
-    protected override async Task OnAfterRenderAsync(bool firstRender)
-    {
-        if (firstRender && !ShouldBypassAuthLocally())
-        {
-            var stored = await JS.InvokeAsync<string?>("sessionStorage.getItem", SessionKey);
-            _authorized = stored == "1";
-            _checking = false;
-            StateHasChanged();
-        }
-    }
-
-    private async Task Submit()
-    {
-        if (_input == Password)
-        {
-            await JS.InvokeVoidAsync("sessionStorage.setItem", SessionKey, "1");
-            _authorized = true;
-            _wrong = false;
-        }
-        else
-        {
-            _wrong = true;
-            _input = "";
-        }
-    }
-
-    private async Task OnKeyDown(KeyboardEventArgs e)
-    {
-        if (e.Key == "Enter") await Submit();
-    }
-
-    private bool ShouldBypassAuthLocally()
-    {
-        if (Env.IsDevelopment())
-            return true;
-
-        return Uri.TryCreate(Nav.Uri, UriKind.Absolute, out var uri)
-            && (uri.Host.Equals("localhost", StringComparison.OrdinalIgnoreCase)
-                || uri.Host.Equals("127.0.0.1"));
-    }
-}
+    </Authorized>
+    <NotAuthorized>
+        <div style="max-width:320px;margin:80px auto;">
+            <h5>Sign in to continue</h5>
+            <form action="/pres/login" method="post">
+                <label class="form-label" for="username">Username</label>
+                <input id="username" name="username" autocomplete="username" class="form-control mb-2" required />
+                <label class="form-label" for="password">Password</label>
+                <input id="password" name="password" type="password" autocomplete="current-password" class="form-control mb-3" required />
+                <button type="submit" class="btn btn-primary">Sign in</button>
+            </form>
+        </div>
+    </NotAuthorized>
+</AuthorizeView>

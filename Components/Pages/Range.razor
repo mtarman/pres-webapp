@@ -218,8 +218,19 @@ else
         }
         else
         {
-            var defaultStartIndex = Math.Max(0, all.Count - 7);
-            _fromDate = all[defaultStartIndex];
+            var currentMonth = DateTime.Now.ToString("yyyy-MM");
+            var currentMonthDates = all
+                .Where(d => d.StartsWith(currentMonth, StringComparison.Ordinal))
+                .ToList();
+            var defaultDates = !string.IsNullOrEmpty(ToParam)
+                ? all.Where(d => string.Compare(d, _toDate, StringComparison.Ordinal) <= 0).ToList()
+                : (currentMonthDates.Count > 0 ? currentMonthDates : all);
+            if (defaultDates.Count == 0)
+                defaultDates = all;
+            var defaultStartIndex = Math.Max(0, defaultDates.Count - 7);
+            _fromDate = defaultDates[defaultStartIndex];
+            if (string.IsNullOrEmpty(ToParam))
+                _toDate = defaultDates[^1];
         }
 
         // Clamp to available range

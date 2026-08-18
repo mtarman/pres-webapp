@@ -17,6 +17,8 @@ Platforms/*/obj/
 # Secrets
 appsettings.json
 *.env
+App_Data/admin-settings.json
+App_Data/admin-settings.json.tmp
 
 # OS
 .DS_Store

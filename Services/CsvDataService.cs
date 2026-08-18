@@ -8,16 +8,27 @@ public class CsvDataService
     private const string AutoLoadPath = @"C:\Users\mll_admin\Documents\pres\presence_log.csv";
     private const string DevelopmentAutoLoadPath = @"D:\blazorcode\data\presence_log.csv";
 
+    private readonly object _cacheLock = new();
+    private readonly PersistentSettingsService _settings;
     private List<(DateTime Ts, int PollMinutes, string UserId, string Availability, string Activity)>? _logCache;
+    private HashSet<string> _availableDates = new(StringComparer.Ordinal);
+    private HashSet<string> _availableUsers = new(StringComparer.Ordinal);
+    private HashSet<string> _loadedMonths = new(StringComparer.Ordinal);
     private string? _lastFilePath;
+    private string? _uploadedCsvContent;
 
-    public bool HasData => _logCache is { Count: > 0 };
+    public bool HasData
+    {
+        get { lock (_cacheLock) return _availableDates.Count > 0; }
+    }
+
     public bool CanReload => _lastFilePath != null;
 
     public event Action? DataChanged;
 
-    public CsvDataService()
+    public CsvDataService(PersistentSettingsService settings)
     {
+        _settings = settings;
         var initialPath = ResolveAutoLoadPath();
         if (initialPath != null)
             LoadFromPath(initialPath);
@@ -42,8 +53,7 @@ public class CsvDataService
 
     public void LoadFromPath(string path)
     {
-        _logCache = ParseRows(File.ReadAllText(path));
-        _lastFilePath = path;
+        InitializeSource(File.ReadAllText(path), path, uploadedCsvContent: null);
     }
 
     public void Reload()
@@ -56,12 +66,37 @@ public class CsvDataService
     // Called when the user picks a CSV with no known path (content-only fallback)
     public void LoadFromCsv(string csvContent)
     {
-        _logCache = ParseRows(csvContent);
+        InitializeSource(csvContent, filePath: null, uploadedCsvContent: csvContent);
         DataChanged?.Invoke();
     }
 
+    private void InitializeSource(string csvContent, string? filePath, string? uploadedCsvContent)
+    {
+        var currentMonth = DateTime.Now.ToString("yyyy-MM", CultureInfo.InvariantCulture);
+        var availableDates = new HashSet<string>(StringComparer.Ordinal);
+        var availableUsers = new HashSet<string>(StringComparer.Ordinal);
+        var currentRows = ParseRows(
+            csvContent,
+            new HashSet<string>([currentMonth], StringComparer.Ordinal),
+            availableDates,
+            availableUsers);
+
+        lock (_cacheLock)
+        {
+            _logCache = currentRows;
+            _availableDates = availableDates;
+            _availableUsers = availableUsers;
+            _loadedMonths = [currentMonth];
+            _lastFilePath = filePath;
+            _uploadedCsvContent = uploadedCsvContent;
+        }
+    }
+
     private static List<(DateTime Ts, int PollMinutes, string UserId, string Availability, string Activity)> ParseRows(
-        string csvContent)
+        string csvContent,
+        IReadOnlySet<string>? monthsToLoad = null,
+        ISet<string>? availableDates = null,
+        ISet<string>? availableUsers = null)
     {
         var lines = csvContent.Split('\n').Select(l => l.TrimEnd('\r')).ToArray();
 
@@ -86,6 +121,12 @@ public class CsvDataService
             var cols = line.Split(',').Select(c => c.Trim('"')).ToArray();
 
             var ts = DateTime.Parse(cols[headers[tsCol]], null, DateTimeStyles.AssumeLocal);
+            var dateKey = ts.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+            availableDates?.Add(dateKey);
+            availableUsers?.Add(cols[headers["user_id"]]);
+
+            if (monthsToLoad != null && !monthsToLoad.Contains(dateKey[..7]))
+                continue;
 
             result.Add((ts,
                 int.Parse(cols[headers["poll_minutes"]]),
@@ -98,18 +139,97 @@ public class CsvDataService
         return result;
     }
 
+    private void EnsureMonthsLoaded(IEnumerable<string> monthKeys)
+    {
+        lock (_cacheLock)
+        {
+            var missing = monthKeys
+                .Where(IsMonthKey)
+                .Where(month => !_loadedMonths.Contains(month))
+                .Distinct(StringComparer.Ordinal)
+                .ToHashSet(StringComparer.Ordinal);
+
+            if (missing.Count == 0) return;
+
+            var csvContent = _uploadedCsvContent;
+            if (csvContent == null && _lastFilePath != null)
+                csvContent = File.ReadAllText(_lastFilePath);
+
+            if (csvContent != null)
+                _logCache!.AddRange(ParseRows(csvContent, missing));
+
+            _loadedMonths.UnionWith(missing);
+        }
+    }
+
+    private static bool IsMonthKey(string value)
+        => DateTime.TryParseExact(value, "yyyy-MM", CultureInfo.InvariantCulture,
+            DateTimeStyles.None, out _);
+
+    private void EnsureDateLoaded(string date)
+    {
+        if (date.Length >= 7)
+            EnsureMonthsLoaded([date[..7]]);
+    }
+
+    private void EnsureWeekLoaded(string weekKey)
+    {
+        if (!DateTime.TryParseExact(weekKey, "yyyy-MM-dd", CultureInfo.InvariantCulture,
+                DateTimeStyles.None, out var monday))
+            return;
+
+        EnsureMonthsLoaded([
+            monday.ToString("yyyy-MM", CultureInfo.InvariantCulture),
+            monday.AddDays(6).ToString("yyyy-MM", CultureInfo.InvariantCulture)
+        ]);
+    }
+
+    private void EnsureRangeLoaded(string fromDate, string toDate)
+    {
+        if (!DateTime.TryParseExact(fromDate, "yyyy-MM-dd", CultureInfo.InvariantCulture,
+                DateTimeStyles.None, out var from)
+            || !DateTime.TryParseExact(toDate, "yyyy-MM-dd", CultureInfo.InvariantCulture,
+                DateTimeStyles.None, out var to)
+            || from > to)
+            return;
+
+        var months = new List<string>();
+        for (var month = new DateTime(from.Year, from.Month, 1);
+             month <= new DateTime(to.Year, to.Month, 1);
+             month = month.AddMonths(1))
+        {
+            months.Add(month.ToString("yyyy-MM", CultureInfo.InvariantCulture));
+        }
+
+        EnsureMonthsLoaded(months);
+    }
+
     private List<(DateTime Ts, int PollMinutes, string UserId, string Availability, string Activity)> Rows()
-        => _logCache ?? new();
+    {
+        lock (_cacheLock)
+            return _logCache?
+                .Where(row => _settings.IsUserVisible(row.UserId))
+                .ToList()
+                ?? new();
+    }
 
     public IReadOnlyList<string> GetAvailableDates()
-        => Rows()
-              .Select(r => r.Ts.ToString("yyyy-MM-dd"))
-              .Distinct()
-              .OrderBy(d => d)
-              .ToList();
+    {
+        lock (_cacheLock)
+            return _availableDates.OrderBy(d => d).ToList();
+    }
+
+    public IReadOnlyList<string> GetAvailableUsers()
+    {
+        lock (_cacheLock)
+            return _availableUsers.OrderBy(userId => userId).ToList();
+    }
 
     public IReadOnlyList<DailyPresenceRecord> GetRecordsForDate(string date)
-        => Aggregate(Rows().Where(r => r.Ts.ToString("yyyy-MM-dd") == date), date);
+    {
+        EnsureDateLoaded(date);
+        return Aggregate(Rows().Where(r => r.Ts.ToString("yyyy-MM-dd") == date), date);
+    }
 
     private static IReadOnlyList<DailyPresenceRecord> Aggregate(
         IEnumerable<(DateTime Ts, int PollMinutes, string UserId, string Availability, string Activity)> rows,
@@ -167,6 +287,7 @@ public class CsvDataService
 
     public IReadOnlyList<DailyPresenceRecord> GetRecordsForRange(string fromDate, string toDate)
     {
+        EnsureRangeLoaded(fromDate, toDate);
         var rows = Rows().Where(r =>
         {
             var d = r.Ts.ToString("yyyy-MM-dd");
@@ -204,21 +325,30 @@ public class CsvDataService
     }
 
     public int GetTotalMinutesForDate(string date)
-        => Rows()
+    {
+        EnsureDateLoaded(date);
+        return Rows()
             .Where(r => r.Ts.ToString("yyyy-MM-dd") == date)
             .Select(r => r.Ts)
             .Distinct()
             .Count() * 2;
+    }
 
     public IReadOnlyList<(DateTime Ts, int PollMinutes, string UserId, string Availability)>
         GetTimelineForDate(string date)
-        => Rows()
+    {
+        EnsureDateLoaded(date);
+        return Rows()
             .Where(r => r.Ts.ToString("yyyy-MM-dd") == date)
             .Select(r => (r.Ts, r.PollMinutes, r.UserId, r.Availability))
             .ToList();
+    }
 
     public IReadOnlyList<TimeRangeRecord> GetProductiveByRange(string date)
-        => ProductiveByRangeCore(Rows().Where(r => r.Ts.ToString("yyyy-MM-dd") == date));
+    {
+        EnsureDateLoaded(date);
+        return ProductiveByRangeCore(Rows().Where(r => r.Ts.ToString("yyyy-MM-dd") == date));
+    }
 
     private static IReadOnlyList<TimeRangeRecord> ProductiveByRangeCore(
         IEnumerable<(DateTime Ts, int PollMinutes, string UserId, string Availability, string Activity)> source)
@@ -255,42 +385,60 @@ public class CsvDataService
     }
 
     public IReadOnlyList<string> GetAvailableWeeks()
-        => Rows()
-              .Select(r => WeekKey(r.Ts))
-              .Distinct()
+        => GetAvailableDates()
+              .Select(d => WeekKey(DateTime.ParseExact(d, "yyyy-MM-dd", CultureInfo.InvariantCulture)))
+              .Distinct(StringComparer.Ordinal)
               .OrderBy(w => w)
               .ToList();
 
     public IReadOnlyList<DailyPresenceRecord> GetRecordsForWeek(string weekKey)
-        => Aggregate(Rows().Where(r => WeekKey(r.Ts) == weekKey), weekKey);
+    {
+        EnsureWeekLoaded(weekKey);
+        return Aggregate(Rows().Where(r => WeekKey(r.Ts) == weekKey), weekKey);
+    }
 
     public int GetTotalMinutesForWeek(string weekKey)
-        => Rows()
+    {
+        EnsureWeekLoaded(weekKey);
+        return Rows()
               .Where(r => WeekKey(r.Ts) == weekKey)
               .Select(r => r.Ts)
               .Distinct()
               .Count() * 2;
+    }
 
     public IReadOnlyList<TimeRangeRecord> GetProductiveByRangeForWeek(string weekKey)
-        => ProductiveByRangeCore(Rows().Where(r => WeekKey(r.Ts) == weekKey));
+    {
+        EnsureWeekLoaded(weekKey);
+        return ProductiveByRangeCore(Rows().Where(r => WeekKey(r.Ts) == weekKey));
+    }
 
     public IReadOnlyList<string> GetAvailableMonths()
-        => Rows()
-              .Select(r => r.Ts.ToString("yyyy-MM"))
-              .Distinct()
+        => GetAvailableDates()
+              .Select(d => d[..7])
+              .Distinct(StringComparer.Ordinal)
               .OrderBy(m => m)
               .ToList();
 
     public IReadOnlyList<DailyPresenceRecord> GetRecordsForMonth(string monthKey)
-        => Aggregate(Rows().Where(r => r.Ts.ToString("yyyy-MM") == monthKey), monthKey);
+    {
+        EnsureMonthsLoaded([monthKey]);
+        return Aggregate(Rows().Where(r => r.Ts.ToString("yyyy-MM") == monthKey), monthKey);
+    }
 
     public int GetTotalMinutesForMonth(string monthKey)
-        => Rows()
+    {
+        EnsureMonthsLoaded([monthKey]);
+        return Rows()
               .Where(r => r.Ts.ToString("yyyy-MM") == monthKey)
               .Select(r => r.Ts)
               .Distinct()
               .Count() * 2;
+    }
 
     public IReadOnlyList<TimeRangeRecord> GetProductiveByRangeForMonth(string monthKey)
-        => ProductiveByRangeCore(Rows().Where(r => r.Ts.ToString("yyyy-MM") == monthKey));
+    {
+        EnsureMonthsLoaded([monthKey]);
+        return ProductiveByRangeCore(Rows().Where(r => r.Ts.ToString("yyyy-MM") == monthKey));
+    }
 }

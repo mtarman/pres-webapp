@@ -1,6 +1,14 @@
 <Router AppAssembly="typeof(App).Assembly">
     <Found Context="routeData">
-        <RouteView RouteData="routeData" DefaultLayout="typeof(Components.Layout.MainLayout)" />
+        <AuthorizeRouteView RouteData="routeData" DefaultLayout="typeof(Components.Layout.MainLayout)">
+            <NotAuthorized>
+                <LayoutView Layout="typeof(Components.Layout.MainLayout)">
+                    <div class="alert alert-danger mt-4">
+                        You do not have permission to view this page.
+                    </div>
+                </LayoutView>
+            </NotAuthorized>
+        </AuthorizeRouteView>
         <FocusOnNavigate RouteData="routeData" Selector="h1" />
     </Found>
 </Router>

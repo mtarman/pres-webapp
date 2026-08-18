@@ -2,17 +2,74 @@ using PresAnalysis;
 using PresAnalysis.Models;
 using PresAnalysis.Services;
 using ClosedXML.Excel;
+using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Hosting.StaticWebAssets;
+using System.Security.Claims;
 
 var builder = WebApplication.CreateBuilder(args);
 StaticWebAssetsLoader.UseStaticWebAssets(builder.Environment, builder.Configuration);
 builder.Services.AddRazorComponents().AddInteractiveServerComponents();
+builder.Services.AddCascadingAuthenticationState();
+builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
+    .AddCookie(options =>
+    {
+        options.Cookie.Name = "pres_auth";
+        options.Cookie.Path = "/pres";
+        options.ExpireTimeSpan = TimeSpan.FromHours(8);
+        options.SlidingExpiration = true;
+        options.Events.OnRedirectToLogin = context =>
+        {
+            context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+            return Task.CompletedTask;
+        };
+        options.Events.OnRedirectToAccessDenied = context =>
+        {
+            context.Response.StatusCode = StatusCodes.Status403Forbidden;
+            return Task.CompletedTask;
+        };
+    });
+builder.Services.AddAuthorization(options =>
+{
+    options.AddPolicy("AdminOnly", policy =>
+        policy.RequireAssertion(context => IsUser(context.User, "mtarman")));
+});
+builder.Services.AddSingleton<PersistentSettingsService>();
 builder.Services.AddSingleton<CsvDataService>();
 var app = builder.Build();
 app.UsePathBase("/pres");
+app.UseRouting();
+app.UseAuthentication();
+app.UseAuthorization();
 app.UseAntiforgery();
 app.MapStaticAssets();
 app.MapRazorComponents<App>().AddInteractiveServerRenderMode();
+
+app.MapPost("/login", async (HttpContext context) =>
+{
+    var form = await context.Request.ReadFormAsync();
+    var username = form["username"].ToString().Trim();
+    var password = form["password"].ToString();
+
+    if (string.IsNullOrWhiteSpace(username) || password != "mlpres")
+        return Results.Redirect("/pres/?loginError=1");
+
+    var identity = new ClaimsIdentity(
+        [new Claim(ClaimTypes.Name, username)],
+        CookieAuthenticationDefaults.AuthenticationScheme);
+
+    await context.SignInAsync(
+        CookieAuthenticationDefaults.AuthenticationScheme,
+        new ClaimsPrincipal(identity));
+
+    return Results.Redirect("/pres/");
+}).DisableAntiforgery();
+
+app.MapPost("/logout", async (HttpContext context) =>
+{
+    await context.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
+    return Results.Redirect("/pres/");
+}).DisableAntiforgery();
 
 app.MapPost("/api/upload-csv", async (HttpRequest request, CsvDataService dataService) =>
 {
@@ -23,7 +80,7 @@ app.MapPost("/api/upload-csv", async (HttpRequest request, CsvDataService dataSe
     var content = await reader.ReadToEndAsync();
     dataService.LoadFromCsv(content);
     return Results.Redirect("/");
-}).DisableAntiforgery();
+}).DisableAntiforgery().RequireAuthorization("AdminOnly");
 
 app.MapGet("/api/export-range", (string? from, string? to, CsvDataService dataService) =>
 {
@@ -113,4 +170,13 @@ static string ExportFmt(int minutes)
     if (h == 0) return $"{m}m";
     if (m == 0) return $"{h}h";
     return $"{h}h {m}m";
+}
+
+static bool IsUser(ClaimsPrincipal principal, string expectedUsername)
+{
+    var name = principal.Identity?.Name;
+    if (string.IsNullOrWhiteSpace(name)) return false;
+
+    var username = name.Split('\\').Last().Split('@').First();
+    return username.Equals(expectedUsername, StringComparison.OrdinalIgnoreCase);
 }

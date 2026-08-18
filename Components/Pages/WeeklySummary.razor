@@ -172,9 +172,16 @@ else
         if (!DataService.HasData) return;
 
         _weeks = DataService.GetAvailableWeeks().AsEnumerable().Reverse().ToList();
+        var monthStart = new DateTime(DateTime.Now.Year, DateTime.Now.Month, 1);
+        var monthEnd = monthStart.AddMonths(1).AddDays(-1);
+        var currentMonthWeek = _weeks.FirstOrDefault(w =>
+        {
+            var monday = DateTime.Parse(w);
+            return monday <= monthEnd && monday.AddDays(6) >= monthStart;
+        });
         _selectedWeek = (!string.IsNullOrEmpty(WeekParam) && _weeks.Contains(WeekParam))
             ? WeekParam
-            : (_weeks.Count > 0 ? _weeks[0] : "");
+            : (currentMonthWeek ?? (_weeks.Count > 0 ? _weeks[0] : ""));
 
         _rows = DataService.GetRecordsForWeek(_selectedWeek)
                            .OrderBy(r => Initials(r.UserId)).ToList();
